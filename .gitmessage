@@ -1,0 +1,21 @@
+
+
+# ── 標題：<類型>(<範圍>): <摘要>  最多 50 字元，不加句號 ──
+# 類型：feat fix style refactor perf docs chore revert
+# 範圍：display editor phrases history icon font repo（選填）
+# 例：feat(phrases): 新增常用句拖曳排序
+#
+# ── 說明（空一行後寫；很小的改動可省略）──
+# 原因：為什麼要改
+#
+# 變更：
+# - 改了什麼
+#
+# 驗證：怎麼確認的；沒驗證就寫「未驗證」加原因
+#
+# ── 頁尾（選填）──
+# Refs: #12
+# BREAKING CHANGE: 說明
+# Co-Authored-By: 名字 <email>
+#
+# 完整規範見 COMMIT_CONVENTION.md

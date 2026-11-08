@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# 檢查 commit 訊息是否符合 COMMIT_CONVENTION.md
+export LC_ALL=en_US.UTF-8
+
+file="$1"
+# 去掉註解行與 scissors 之後的內容（git --verbose 會附上 diff）
+msg="$(sed -e '/^# ------------------------ >8 ------------------------$/,$d' -e '/^#/d' "$file")"
+header="$(printf '%s\n' "$msg" | sed -n '1p')"
+
+fail() {
+  printf '\n✗ commit 訊息不符合規範：%s\n\n  標題：%s\n\n  格式：<類型>(<範圍>): <摘要>\n  類型：feat fix style refactor perf docs chore revert\n  詳見 COMMIT_CONVENTION.md\n\n' "$1" "$header" >&2
+  exit 1
+}
+
+# git 自動產生的訊息不檢查
+case "$header" in
+  Merge\ *|Revert\ \"*|fixup!\ *|squash!\ *|amend!\ *) exit 0 ;;
+esac
+
+[ -n "$header" ] || fail "標題是空的"
+
+types='feat|fix|style|refactor|perf|docs|chore|revert'
+if ! printf '%s' "$header" | grep -Eq "^(${types})(\([a-z0-9-]+\))?!?: [^ ]"; then
+  fail "標題格式錯誤"
+fi
+
+[ "${#header}" -le 50 ] || fail "標題 ${#header} 個字元，最多 50"
+
+case "$header" in
+  *。|*.) fail "標題結尾不要加句號" ;;
+esac
+
+line2="$(printf '%s\n' "$msg" | sed -n '2p')"
+[ -z "$line2" ] || fail "標題和說明之間要空一行"
+
+# 有說明（頁尾以外的內容）時，必須有 原因／變更／驗證 三段
+body="$(printf '%s\n' "$msg" | sed '1,2d' | grep -Ev '^([A-Za-z-]+|BREAKING CHANGE): ' | grep -Ev '^[[:space:]]*$')"
+if [ -n "$body" ]; then
+  for field in 原因： 變更： 驗證：; do
+    printf '%s\n' "$body" | grep -q "^${field}" || fail "說明缺少「${field}」段落"
+  done
+fi
+
+exit 0

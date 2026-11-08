@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="看我說">
+<meta name="application-name" content="看我說">
+<title>看我說</title>
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- 備用楷體：裝置上沒有標楷體時（例如 iPhone / Android）使用霞鶩文楷 -->
+<link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fg: #FFD500;
+    --fg-dim: rgba(255, 213, 0, .55);
+    --fg-faint: rgba(255, 213, 0, .18);
+    --bg: #000;
+    --kai: "BiauKai", "標楷體", "DFKai-SB", "Kaiti TC", "TW-Kai", "STKaiti", "KaiTi", "LXGW WenKai TC", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--fg);
+    font-family: var(--kai);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body { overscroll-behavior: none; }
+
+  /* ---------- 輸入畫面 ---------- */
+  #editor {
+    display: flex; flex-direction: column; gap: 12px;
+    height: 100dvh; min-height: 100%;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+             max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  #input {
+    flex: 1 1 auto; min-height: 120px; width: 100%;
+    resize: none;
+    background: #0a0a0a; color: var(--fg);
+    border: 2px solid var(--fg-dim); border-radius: 14px;
+    padding: 14px 16px;
+    font: 700 clamp(20px, 3.2vw, 28px)/1.45 var(--kai);
+    caret-color: var(--fg);
+    outline: none;
+  }
+  #input:focus { border-color: var(--fg); }
+  #input::placeholder { color: var(--fg-faint); }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: 700 20px/1 var(--kai);
+    color: var(--fg); background: transparent;
+    border: 2px solid var(--fg-dim); border-radius: 12px;
+    padding: 12px 16px; cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:active { background: var(--fg-faint); }
+  #showBtn {
+    flex: 1 1 auto;
+    background: var(--fg); color: #000; border-color: var(--fg);
+    font-size: 22px; padding: 14px;
+  }
+  #showBtn:active { filter: brightness(.85); }
+  button.on { background: var(--fg-faint); border-color: var(--fg); }
+
+  .label { font-size: 16px; color: var(--fg-dim); margin: 2px 0 -4px; display: flex; justify-content: space-between; align-items: baseline; }
+  .label button { font-size: 15px; padding: 4px 10px; border-width: 1px; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; position: relative;
+    font-size: 22px; padding: 10px 14px;
+    max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .chip .x {
+    display: none; margin-left: 8px; color: #000; background: var(--fg);
+    border-radius: 50%; width: 22px; height: 22px; line-height: 22px;
+    font-size: 16px; text-align: center; vertical-align: middle;
+  }
+  .managing .chip .x { display: inline-block; }
+  .managing .chips { flex-wrap: wrap; overflow: visible; }
+  .managing .chip { touch-action: none; cursor: grab; border-style: dashed; }
+  .chip.dragging { background: var(--fg); color: #000; border-style: solid; transform: scale(1.06); cursor: grabbing; z-index: 2; }
+  .chip.dragging .x { background: #000; color: var(--fg); }
+  .empty { color: var(--fg-faint); font-size: 17px; padding: 10px 0; }
+  .hint { font-size: 14px; color: var(--fg-faint); text-align: center; }
+
+  /* ---------- 全螢幕顯示 ---------- */
+  #display {
+    position: fixed; inset: 0; z-index: 10;
+    display: none; align-items: center; justify-content: center;
+    background: var(--bg);
+    cursor: pointer; user-select: none; -webkit-user-select: none;
+  }
+  #display.show { display: flex; }
+  #display.flip #text { transform: rotate(180deg); }
+  #text {
+    margin: 0;
+    font-family: var(--kai); font-weight: 700;
+    line-height: 1.22;
+    text-align: center;
+    white-space: pre-wrap;
+    overflow-wrap: normal;
+    word-break: normal;
+    line-break: strict;
+  }
+  #tapHint {
+    position: absolute; left: 0; right: 0;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    text-align: center; font-size: 16px; color: var(--fg-dim);
+    transition: opacity .6s; pointer-events: none;
+  }
+  #tapHint.gone { opacity: 0; }
+</style>
+</head>
+<body>
+
+<main id="editor">
+  <textarea id="input" placeholder="在這裡打字，按 Enter 顯示" autofocus
+            autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send"></textarea>
+
+  <div class="row">
+    <button id="showBtn" type="button">顯示 ⤢</button>
+    <button id="clearBtn" type="button">清除</button>
+    <button id="saveBtn" type="button">＋常用</button>
+    <button id="flipBtn" type="button" title="把文字倒過來，給對面的人看">翻轉</button>
+  </div>
+
+  <div id="phraseWrap">
+    <div class="label"><span id="phraseLabel">常用句（點一下直接顯示）</span><button id="manageBtn" type="button">管理</button></div>
+    <div class="chips" id="phrases"></div>
+  </div>
+
+  <div id="historyWrap">
+    <div class="label"><span>最近說過</span><button id="clearHistBtn" type="button">清空</button></div>
+    <div class="chips" id="history"></div>
+  </div>
+
+  <div class="hint">Enter 顯示 · Shift+Enter 換行 · 顯示時點螢幕或按 Esc 返回</div>
+</main>
+
+<div id="display" role="button" aria-label="點一下返回輸入">
+  <p id="text"></p>
+  <div id="tapHint">點一下返回</div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const input = $('input'), display = $('display'), text = $('text'), tapHint = $('tapHint');
+  const phrasesEl = $('phrases'), historyEl = $('history'), phraseWrap = $('phraseWrap');
+
+  // ---------- 儲存（失敗時照常運作，只是不會記住） ----------
+  const store = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); }
+      catch { return fallback; }
+    },
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+  };
+
+  const DEFAULT_PHRASES = ['請再說一次', '我聽不到', '請等一下', '好', '不用了，謝謝', '謝謝', '請用打字', '在哪裡？', '多少錢？'];
+  let phrases = store.get('phrases', DEFAULT_PHRASES);
+  let history = store.get('history', []);
+  let flipped = store.get('flipped', false);
+
+  // ---------- 列表 ----------
+  function renderChips(el, items, onPick, onRemove) {
+    el.innerHTML = '';
+    if (!items.length) {
+      const e = document.createElement('div');
+      e.className = 'empty'; e.textContent = '（還沒有）';
+      el.appendChild(e); return;
+    }
+    items.forEach((t, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.dataset.i = i;
+      b.appendChild(document.createTextNode(t.replace(/\n/g, ' ')));
+      if (onRemove) {
+        const x = document.createElement('span');
+        x.className = 'x'; x.textContent = '×';
+        b.appendChild(x);
+      }
+      b.addEventListener('click', (e) => {
+        if (onRemove && phraseWrap.classList.contains('managing')) {
+          if (e.target.classList.contains('x')) onRemove(i);
+        } else onPick(t);
+      });
+      el.appendChild(b);
+    });
+  }
+  function renderPhrases() {
+    renderChips(phrasesEl, phrases, show, (i) => {
+      phrases.splice(i, 1); store.set('phrases', phrases); renderPhrases();
+    });
+  }
+  // ---------- 拖曳排序（管理模式） ----------
+  let drag = null;
+  phrasesEl.addEventListener('pointerdown', (e) => {
+    if (!phraseWrap.classList.contains('managing')) return;
+    const chip = e.target.closest('.chip');
+    if (!chip || e.target.classList.contains('x')) return;
+    drag = { chip, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
+    chip.setPointerCapture(e.pointerId);
+  });
+  phrasesEl.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved) {
+      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+      drag.moved = true;
+      drag.chip.classList.add('dragging');
+    }
+    e.preventDefault();
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    const over = hit && hit.closest('.chip');
+    if (!over || over === drag.chip || over.parentNode !== phrasesEl) return;
+    const r = over.getBoundingClientRect();
+    const before = e.clientX < r.left + r.width / 2;
+    phrasesEl.insertBefore(drag.chip, before ? over : over.nextSibling);
+  });
+  function endDrag(e) {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    const { chip, moved } = drag;
+    drag = null;
+    chip.classList.remove('dragging');
+    if (!moved) return;
+    phrases = [...phrasesEl.querySelectorAll('.chip')].map((c) => phrases[+c.dataset.i]);
+    store.set('phrases', phrases);
+    renderPhrases();
+  }
+  phrasesEl.addEventListener('pointerup', endDrag);
+  phrasesEl.addEventListener('pointercancel', endDrag);
+
+  function renderHistory() {
+    renderChips(historyEl, history, show);
+  }
+  function addHistory(t) {
+    history = [t, ...history.filter((h) => h !== t)].slice(0, 15);
+    store.set('history', history);
+    renderHistory();
+  }
+
+  // ---------- 自動放到最大 ----------
+  function fit() {
+    if (!display.classList.contains('show')) return;
+    const pad = Math.max(16, Math.min(display.clientWidth, display.clientHeight) * 0.04);
+    const W = display.clientWidth - pad * 2;
+    const H = display.clientHeight - pad * 2;
+    text.style.width = W + 'px';
+    let lo = 10, hi = Math.max(W, H);
+    for (let n = 0; n < 24 && hi - lo > 0.5; n++) {
+      const mid = (lo + hi) / 2;
+      text.style.fontSize = mid + 'px';
+      if (text.scrollWidth <= W + 0.5 && text.scrollHeight <= H + 0.5) lo = mid; else hi = mid;
+    }
+    text.style.fontSize = Math.floor(lo) + 'px';
+  }
+
+  // ---------- 螢幕常亮 ----------
+  let wakeLock = null;
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+  }
+  function releaseAwake() {
+    try { wakeLock && wakeLock.release(); } catch {}
+    wakeLock = null;
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && display.classList.contains('show')) keepAwake();
+  });
+
+  // ---------- 顯示 / 返回 ----------
+  let hintTimer = null, enteredFullscreen = false;
+
+  function show(t) {
+    t = (t ?? input.value).replace(/^\s+|\s+$/g, '');
+    if (!t) { input.focus(); return; }
+    text.textContent = t;
+    display.classList.toggle('flip', flipped);
+    display.classList.add('show');
+    input.blur();
+    addHistory(t);
+
+    const root = document.documentElement;
+    if (root.requestFullscreen && !document.fullscreenElement) {
+      root.requestFullscreen({ navigationUI: 'hide' })
+        .then(() => { enteredFullscreen = true; })
+        .catch(() => {});
+    }
+    keepAwake();
+
+    tapHint.classList.remove('gone');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => tapHint.classList.add('gone'), 1800);
+
+    fit();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  }
+
+  function hide() {
+    if (!display.classList.contains('show')) return;
+    display.classList.remove('show');
+    releaseAwake();
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    enteredFullscreen = false;
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  display.addEventListener('click', hide);
+  document.addEventListener('fullscreenchange', () => {
+    // 使用者用 Esc / 系統手勢離開全螢幕時，一起回到輸入畫面
+    if (!document.fullscreenElement && enteredFullscreen) hide();
+  });
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', () => setTimeout(fit, 250));
+
+  // ---------- 鍵盤 ----------
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+      e.preventDefault();
+      show();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!display.classList.contains('show')) return;
+    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hide(); }
+  });
+
+  // ---------- 按鈕 ----------
+  $('showBtn').addEventListener('click', () => show());
+  $('clearBtn').addEventListener('click', () => { input.value = ''; input.focus(); });
+  $('saveBtn').addEventListener('click', () => {
+    const t = input.value.trim();
+    if (!t) { input.focus(); return; }
+    phrases = [t, ...phrases.filter((p) => p !== t)];
+    store.set('phrases', phrases);
+    renderPhrases();
+  });
+  const flipBtn = $('flipBtn');
+  const syncFlip = () => { flipBtn.classList.toggle('on', flipped); flipBtn.textContent = flipped ? '翻轉：開' : '翻轉'; };
+  flipBtn.addEventListener('click', () => { flipped = !flipped; store.set('flipped', flipped); syncFlip(); });
+  $('manageBtn').addEventListener('click', (e) => {
+    const on = phraseWrap.classList.toggle('managing');
+    e.currentTarget.textContent = on ? '完成' : '管理';
+    e.currentTarget.classList.toggle('on', on);
+    $('phraseLabel').textContent = on ? '拖曳排序 · 點 × 刪除' : '常用句（點一下直接顯示）';
+  });
+  $('clearHistBtn').addEventListener('click', () => { history = []; store.set('history', history); renderHistory(); });
+
+  renderPhrases();
+  renderHistory();
+  syncFlip();
+})();
+</script>
+</body>
+</html>

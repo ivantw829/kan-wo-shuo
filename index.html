@@ -46,7 +46,7 @@
     background: #0a0a0a; color: var(--fg);
     border: 2px solid var(--fg-dim); border-radius: 14px;
     padding: 14px 16px;
-    font: 700 clamp(20px, 3.2vw, 28px)/1.45 var(--kai);
+    font: 700 clamp(24px, 4.5vw, 40px)/1.4 var(--kai);
     caret-color: var(--fg);
     outline: none;
   }
@@ -123,18 +123,19 @@
 <body>
 
 <main id="editor">
-  <textarea id="input" placeholder="在這裡打字，按 Enter 顯示" autofocus
+  <textarea id="input" placeholder="在這裡打字，按 Enter 全螢幕" autofocus
             autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send"></textarea>
 
   <div class="row">
-    <button id="showBtn" type="button">顯示 ⤢</button>
+    <button id="showBtn" type="button">全螢幕 ⤢</button>
     <button id="clearBtn" type="button">清除</button>
     <button id="saveBtn" type="button">＋常用</button>
+    <button id="sizeBtn" type="button" title="全螢幕文字的最大字級">字級：中</button>
     <button id="flipBtn" type="button" title="把文字倒過來，給對面的人看">翻轉</button>
   </div>
 
   <div id="phraseWrap">
-    <div class="label"><span id="phraseLabel">常用句（點一下直接顯示）</span><button id="manageBtn" type="button">管理</button></div>
+    <div class="label"><span id="phraseLabel">常用句（點一下直接全螢幕）</span><button id="manageBtn" type="button">管理</button></div>
     <div class="chips" id="phrases"></div>
   </div>
 
@@ -143,7 +144,7 @@
     <div class="chips" id="history"></div>
   </div>
 
-  <div class="hint">Enter 顯示 · Shift+Enter 換行 · 顯示時點螢幕或按 Esc 返回</div>
+  <div class="hint">Enter 全螢幕 · Shift+Enter 換行 · 全螢幕時點一下或按 Esc 返回</div>
 </main>
 
 <div id="display" role="button" aria-label="點一下返回輸入">
@@ -170,6 +171,11 @@
   let phrases = store.get('phrases', DEFAULT_PHRASES);
   let history = store.get('history', []);
   let flipped = store.get('flipped', false);
+  // 全螢幕字級上限：畫面短邊的比例。長句會再自動縮小以塞進畫面。
+  const SIZES = { '大': 0.34, '中': 0.24, '小': 0.16 };
+  const SIZE_ORDER = ['中', '大', '小'];
+  let size = store.get('size', '中');
+  if (!(size in SIZES)) size = '中';
 
   // ---------- 列表 ----------
   function renderChips(el, items, onPick, onRemove) {
@@ -254,13 +260,19 @@
     const W = display.clientWidth - pad * 2;
     const H = display.clientHeight - pad * 2;
     text.style.width = W + 'px';
-    let lo = 10, hi = Math.max(W, H);
+    const cap = Math.max(24, Math.min(W, H) * SIZES[size]);
+    let lo = 10, hi = cap;
     for (let n = 0; n < 24 && hi - lo > 0.5; n++) {
       const mid = (lo + hi) / 2;
       text.style.fontSize = mid + 'px';
       if (text.scrollWidth <= W + 0.5 && text.scrollHeight <= H + 0.5) lo = mid; else hi = mid;
     }
     text.style.fontSize = Math.floor(lo) + 'px';
+    if (Math.floor(lo) >= Math.floor(cap) - 1) {
+      // 到上限時再確認一次放得下
+      text.style.fontSize = Math.floor(cap) + 'px';
+      if (text.scrollWidth > W + 0.5 || text.scrollHeight > H + 0.5) text.style.fontSize = Math.floor(lo) + 'px';
+    }
   }
 
   // ---------- 螢幕常亮 ----------
@@ -347,17 +359,24 @@
   const flipBtn = $('flipBtn');
   const syncFlip = () => { flipBtn.classList.toggle('on', flipped); flipBtn.textContent = flipped ? '翻轉：開' : '翻轉'; };
   flipBtn.addEventListener('click', () => { flipped = !flipped; store.set('flipped', flipped); syncFlip(); });
+  const sizeBtn = $('sizeBtn');
+  const syncSize = () => { sizeBtn.textContent = '字級：' + size; };
+  sizeBtn.addEventListener('click', () => {
+    size = SIZE_ORDER[(SIZE_ORDER.indexOf(size) + 1) % SIZE_ORDER.length];
+    store.set('size', size); syncSize();
+  });
   $('manageBtn').addEventListener('click', (e) => {
     const on = phraseWrap.classList.toggle('managing');
     e.currentTarget.textContent = on ? '完成' : '管理';
     e.currentTarget.classList.toggle('on', on);
-    $('phraseLabel').textContent = on ? '拖曳排序 · 點 × 刪除' : '常用句（點一下直接顯示）';
+    $('phraseLabel').textContent = on ? '拖曳排序 · 點 × 刪除' : '常用句（點一下直接全螢幕）';
   });
   $('clearHistBtn').addEventListener('click', () => { history = []; store.set('history', history); renderHistory(); });
 
   renderPhrases();
   renderHistory();
   syncFlip();
+  syncSize();
 })();
 </script>
 </body>

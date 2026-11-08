@@ -13,21 +13,23 @@
 
 - 顏色：黃 `#FFD500`、黑 `#000`。半透明黃用 `--fg-dim`、`--fg-faint`。不要加其他顏色。
 - 字型堆疊（CSS 變數 `--kai`）：`BiauKai, 標楷體, DFKai-SB, Kaiti TC, TW-Kai, STKaiti, KaiTi, LXGW WenKai TC, serif`。最後的霞鶩文楷從 Google Fonts 載入，是手機的備援。
-- 全螢幕顯示的字要盡量大；輸入畫面的字**不要太大**（使用者明確說過，目前輸入框最大 28px）。
+- 全螢幕的字**不是越大越好**：使用者覺得短句撐滿整個螢幕很沒用。字級上限是畫面短邊 × `SIZES`（大 0.34／中 0.24／小 0.16，預設中），長句再自動縮小。
+- 按鈕和提示文字用「全螢幕」，不用「顯示」（使用者指定）。
+- 輸入框的字要適中：56px 使用者覺得太大，28px 又太小，目前是 `clamp(24px, 4.5vw, 40px)`。
 - 手機優先：注意 `env(safe-area-inset-*)`、`100dvh`、`touch-action`。
 
 ## 程式重點
 
-- `fit()`：二分搜尋字級，讓 `#text` 的 `scrollWidth/scrollHeight` 塞進顯示區。改顯示樣式（padding、line-height）後要確認它還正確。
+- `fit()`：二分搜尋字級，讓 `#text` 的 `scrollWidth/scrollHeight` 塞進顯示區，上限由 `SIZES[size]` 決定。改顯示樣式（padding、line-height）後要確認它還正確。
 - Enter 送出時要排除輸入法選字：`!e.isComposing && e.keyCode !== 229`。不能拿掉。
-- localStorage 鍵：`phrases`（常用句陣列）、`history`（最近 15 句）、`flipped`（布林）。所有讀寫都經過 `store`，包在 try/catch 裡，存取失敗時網頁照常運作。
+- localStorage 鍵：`phrases`（常用句陣列）、`history`（最近 15 句）、`flipped`（布林）、`size`（`大`／`中`／`小`）。所有讀寫都經過 `store`，包在 try/catch 裡，存取失敗時網頁照常運作。
 - 常用句拖曳排序用 Pointer Events，只在「管理」模式啟用；管理模式下點 chip 本體不刪除，點 × 才刪除。
 - 全螢幕 API 與 Wake Lock 都是「能用就用」，失敗要安靜略過（iPhone Safari 不支援元素全螢幕）。
 
 ## 測試
 
 - 用 Browser pane 預覽：它是用 `data:` URL 載入，**localStorage 會被停用**、相對路徑的 icon 不會顯示，這是預覽限制不是 bug。
-- 自動化工具無法輸入中文，測試時用 JS 設定 `#input` 的 value 再點「顯示」。
+- 自動化工具無法輸入中文，測試時用 JS 設定 `#input` 的 value 再點「全螢幕」按鈕。
 - 手機觸控、主畫面 icon 只能請使用者在實機確認，回報時要說明哪些沒測到。
 
 ## Commit

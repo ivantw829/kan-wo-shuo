@@ -39,6 +39,8 @@
 
 ## 使用方式
 
+**線上版**：<https://ivantw829.github.io/kan-wo-shuo/>（手機直接開，並可「加入主畫面」）
+
 **電腦**：直接用瀏覽器開啟 `index.html`。
 
 **手機**：要放到網路上才能用手機開，例如：
@@ -83,6 +85,10 @@ commit 訊息格式見 [COMMIT_CONVENTION.md](COMMIT_CONVENTION.md)，例如：
 ```
 feat(phrases): 新增常用句拖曳排序
 ```
+
+## 授權
+
+[MIT License](LICENSE)
 
 ### 重新產生 icon
 

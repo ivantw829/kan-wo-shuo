@@ -12,6 +12,7 @@
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- 備用楷體：裝置上沒有標楷體時（例如 iPhone / Android）使用霞鶩文楷 -->
@@ -51,7 +52,7 @@
     outline: none;
   }
   #input:focus { border-color: var(--fg); }
-  #input::placeholder { color: var(--fg-faint); }
+  #input::placeholder { color: var(--fg-dim); }
 
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   button {
@@ -71,7 +72,9 @@
   button.on { background: var(--fg-faint); border-color: var(--fg); }
 
   .label { font-size: 16px; color: var(--fg-dim); margin: 2px 0 -4px; display: flex; justify-content: space-between; align-items: baseline; }
-  .label button { font-size: 15px; padding: 4px 10px; border-width: 1px; }
+  .label button { position: relative; font-size: 15px; padding: 4px 10px; border-width: 1px; }
+  /* 視覺上維持小按鈕，點擊熱區擴大到約 44px */
+  .label button::after { content: ''; position: absolute; inset: -10px -8px; }
   .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .chips::-webkit-scrollbar { display: none; }
   .chip {
@@ -90,7 +93,9 @@
   .chip.dragging { background: var(--fg); color: #000; border-style: solid; transform: scale(1.06); cursor: grabbing; z-index: 2; }
   .chip.dragging .x { background: #000; color: var(--fg); }
   .empty { color: var(--fg-faint); font-size: 17px; padding: 10px 0; }
-  .hint { font-size: 14px; color: var(--fg-faint); text-align: center; }
+  .hint { font-size: 14px; color: var(--fg-dim); text-align: center; }
+  @media (hover: none) { .hint .kb { display: none; } }
+  @media (hover: hover) { .hint .touch { display: none; } }
 
   /* ---------- 全螢幕顯示 ---------- */
   #display {
@@ -100,6 +105,7 @@
     cursor: pointer; user-select: none; -webkit-user-select: none;
   }
   #display.show { display: flex; }
+  #display:focus { outline: none; }
   #display.flip #text { transform: rotate(180deg); }
   #text {
     margin: 0;
@@ -144,11 +150,14 @@
     <div class="chips" id="history"></div>
   </div>
 
-  <div class="hint">Enter 全螢幕 · Shift+Enter 換行 · 全螢幕時點一下或按 Esc 返回</div>
+  <div class="hint">
+    <span class="kb">Enter 全螢幕 · Shift+Enter 換行 · 全螢幕時點一下或按 Esc 返回</span>
+    <span class="touch">按「全螢幕」顯示 · 全螢幕時點一下螢幕返回</span>
+  </div>
 </main>
 
-<div id="display" role="button" aria-label="點一下返回輸入">
-  <p id="text"></p>
+<div id="display" role="button" tabindex="-1" aria-label="點一下返回輸入">
+  <p id="text" aria-live="polite"></p>
   <div id="tapHint">點一下返回</div>
 </div>
 
@@ -191,8 +200,14 @@
       b.appendChild(document.createTextNode(t.replace(/\n/g, ' ')));
       if (onRemove) {
         const x = document.createElement('span');
-        x.className = 'x'; x.textContent = '×';
+        x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-hidden', 'true');
         b.appendChild(x);
+        // 鍵盤：管理模式下聚焦 chip 按 Delete / Backspace 刪除
+        b.addEventListener('keydown', (e) => {
+          if ((e.key === 'Delete' || e.key === 'Backspace') && phraseWrap.classList.contains('managing')) {
+            e.preventDefault(); onRemove(i);
+          }
+        });
       }
       b.addEventListener('click', (e) => {
         if (onRemove && phraseWrap.classList.contains('managing')) {
@@ -289,15 +304,20 @@
   });
 
   // ---------- 顯示 / 返回 ----------
-  let hintTimer = null, enteredFullscreen = false;
+  let hintTimer = null, enteredFullscreen = false, shownAt = 0;
+  // 剛進入全螢幕的短時間內忽略「返回」，避免送出時的連點／同一個按鍵穿透，或對面的人誤觸
+  const IGNORE_MS = 400;
+  const justShown = () => Date.now() - shownAt < IGNORE_MS;
 
   function show(t) {
     t = (t ?? input.value).replace(/^\s+|\s+$/g, '');
     if (!t) { input.focus(); return; }
+    shownAt = Date.now();
     text.textContent = t;
     display.classList.toggle('flip', flipped);
     display.classList.add('show');
     input.blur();
+    try { display.focus({ preventScroll: true }); } catch {}
     addHistory(t);
 
     const root = document.documentElement;
@@ -326,7 +346,7 @@
     input.setSelectionRange(input.value.length, input.value.length);
   }
 
-  display.addEventListener('click', hide);
+  display.addEventListener('click', () => { if (!justShown()) hide(); });
   document.addEventListener('fullscreenchange', () => {
     // 使用者用 Esc / 系統手勢離開全螢幕時，一起回到輸入畫面
     if (!document.fullscreenElement && enteredFullscreen) hide();
@@ -343,18 +363,33 @@
   });
   document.addEventListener('keydown', (e) => {
     if (!display.classList.contains('show')) return;
-    if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); hide(); }
+    if (e.key === 'Escape') { e.preventDefault(); hide(); }
+    else if ((e.key === 'Enter' || e.key === ' ') && !e.repeat && !justShown()) { e.preventDefault(); hide(); }
   });
+
+  // ---------- 草稿（重新整理或分頁被回收後還原） ----------
+  input.value = store.get('draft', '');
+  let draftTimer = null;
+  const saveDraft = () => { clearTimeout(draftTimer); store.set('draft', input.value); };
+  input.addEventListener('input', () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 300); });
+  window.addEventListener('pagehide', saveDraft);
 
   // ---------- 按鈕 ----------
   $('showBtn').addEventListener('click', () => show());
-  $('clearBtn').addEventListener('click', () => { input.value = ''; input.focus(); });
-  $('saveBtn').addEventListener('click', () => {
+  $('clearBtn').addEventListener('click', () => { input.value = ''; saveDraft(); input.focus(); });
+  const saveBtn = $('saveBtn');
+  let savedTimer = null;
+  saveBtn.addEventListener('click', () => {
     const t = input.value.trim();
     if (!t) { input.focus(); return; }
     phrases = [t, ...phrases.filter((p) => p !== t)];
     store.set('phrases', phrases);
     renderPhrases();
+    phrasesEl.scrollLeft = 0;
+    // 回饋：新加入的句子在最左邊
+    saveBtn.textContent = '已加入 ✓';
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => { saveBtn.textContent = '＋常用'; }, 1200);
   });
   const flipBtn = $('flipBtn');
   const syncFlip = () => { flipBtn.classList.toggle('on', flipped); flipBtn.textContent = flipped ? '翻轉：開' : '翻轉'; };
@@ -377,6 +412,11 @@
   renderHistory();
   syncFlip();
   syncSize();
+
+  // ---------- 離線：註冊 service worker（file:// 或不支援時安靜略過） ----------
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
 })();
 </script>
 </body>

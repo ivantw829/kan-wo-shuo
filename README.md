@@ -30,6 +30,8 @@
 | 最近說過 | 記住最近 15 句，點一下再次全螢幕 |
 | 翻轉 | 文字轉 180°，手機平放桌上時對面的人看是正的 |
 | 螢幕常亮 | 全螢幕時不會自動關螢幕（需瀏覽器支援、HTTPS） |
+| 草稿保存 | 輸入框的字會自動記住，重新整理或分頁被回收後還在 |
+| 離線可用 | 開過一次後，沒有網路也能開（需 HTTPS，加到主畫面更穩）；備援字型只會快取用過的字，離線時沒用過的字可能改用系統字型 |
 
 ### 操作
 
@@ -65,6 +67,8 @@
 
 ```
 index.html              整個網頁（HTML + CSS + JS）
+manifest.webmanifest    加入主畫面時的 App 名稱、圖示、顏色
+sw.js                   service worker，讓網頁離線也能開
 icons/                  網頁圖示（icon.svg、PNG 192/512、apple-touch-icon）
 icons/options/          其他 icon 設計備選 A–D
 tools/make-icons.swift  產生 icon 的腳本（macOS）

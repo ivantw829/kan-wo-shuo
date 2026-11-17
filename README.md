@@ -8,7 +8,7 @@
 
 打字後按 Enter，整個螢幕會變成**黑底黃字的楷體大字**，文字自動縮放到適合的大小，舉起手機就能讓對方看清楚。
 
-只有一個 HTML 檔，不用安裝、不用帳號、不連任何伺服器（只會載入備用字型），資料只存在你自己的瀏覽器裡。
+純靜態網頁，不用安裝、不用帳號、不連任何伺服器（只會載入備用字型），資料只存在你自己的瀏覽器裡。
 
 ## 誰會用到
 
@@ -26,7 +26,9 @@
 | 全螢幕大字 | 黑底黃字、標楷體，依畫面大小自動縮放；長句會縮小塞進畫面 |
 | 字級 | 全螢幕文字的上限：大／中／小，避免短句變成一個巨大的字 |
 | 常用句 | 點一下直接全螢幕；「＋常用」把目前文字存起來 |
-| 拖曳排序 | 按「管理」後拖曳常用句調整順序，點 × 刪除 |
+| 管理常用句 | 按「管理」後拖曳排序（鍵盤用 Alt + 方向鍵），點 × 刪除 |
+| 復原 | 刪除常用句、清空最近說過後，5 秒內可以按「復原」 |
+| 匯出／匯入 | 管理模式下把常用句存成 JSON 檔，換手機或清掉瀏覽器資料後再匯入 |
 | 最近說過 | 記住最近 15 句，點一下再次全螢幕 |
 | 翻轉 | 文字轉 180°，手機平放桌上時對面的人看是正的 |
 | 螢幕常亮 | 全螢幕時不會自動關螢幕（需瀏覽器支援、HTTPS） |
@@ -45,16 +47,13 @@
 
 **電腦**：直接用瀏覽器開啟 `index.html`。
 
-**手機**：要放到網路上才能用手機開，例如：
+**手機**：直接開線上版。自己架設的話，把網站檔案放到任何靜態網站空間即可；或在同一個 Wi-Fi 下從電腦開本機伺服器（螢幕常亮與離線需要 HTTPS，這種方式不會有）：
 
-- 放到 GitHub Pages、Netlify、Cloudflare Pages 等靜態網站空間
-- 或在同一個 Wi-Fi 下，從電腦開一個本機伺服器（螢幕常亮功能需要 HTTPS，這種方式不會有）：
+```bash
+npm run serve
+```
 
-  ```bash
-  python3 -m http.server 8000
-  ```
-
-  再用手機開 `http://<電腦的 IP>:8000`
+再用手機開 `http://<電腦的 IP>:4173`
 
 開啟後用瀏覽器的「加入主畫面」，就會像 App 一樣有 icon。
 
@@ -66,12 +65,14 @@
 ## 檔案
 
 ```
-index.html              整個網頁（HTML + CSS + JS）
+index.html              整個網頁（HTML + CSS + JS，沒有建置步驟）
 manifest.webmanifest    加入主畫面時的 App 名稱、圖示、顏色
 sw.js                   service worker，讓網頁離線也能開
-icons/                  網頁圖示（icon.svg、PNG 192/512、apple-touch-icon）
-icons/options/          其他 icon 設計備選 A–D
+icons/                  網頁圖示（icon.svg、PNG 192/512、maskable、apple-touch-icon）
+icons/options/          其他 icon 設計備選 A–D（不會部署）
 tools/make-icons.swift  產生 icon 的腳本（macOS）
+tests/                  Playwright 測試與本機伺服器
+.github/workflows/      測試通過後部署到 GitHub Pages
 COMMIT_CONVENTION.md    commit 訊息規範
 CLAUDE.md               給 Claude Code 的專案說明
 ```
@@ -90,9 +91,19 @@ commit 訊息格式見 [COMMIT_CONVENTION.md](COMMIT_CONVENTION.md)，例如：
 feat(phrases): 新增常用句拖曳排序
 ```
 
-## 授權
+### 測試
 
-[MIT License](LICENSE)
+網站本身不用套件；`package.json` 只給測試用。測試會在桌面 Chrome、Android Chrome、iPhone Safari（WebKit）三種環境跑：
+
+```bash
+npm install
+npx playwright install chromium webkit
+npm test
+```
+
+### 部署
+
+push 到 `main` 後，GitHub Actions 會先跑測試，通過才部署到 GitHub Pages。只發佈 `index.html`、`manifest.webmanifest`、`sw.js`、`icons/*.svg`、`icons/*.png`，其他開發檔案不會公開。
 
 ### 重新產生 icon
 
@@ -101,3 +112,13 @@ feat(phrases): 新增常用句拖曳排序
 ```bash
 swift tools/make-icons.swift "$(find /System/Library/AssetsV2 -name BiauKai.ttf 2>/dev/null | head -1)" icons/options-new
 ```
+
+maskable icon（Android 主畫面）從 `icon-512.png` 縮小再補黑邊：
+
+```bash
+sips -Z 410 icons/icon-512.png --out /tmp/m.png && sips -p 512 512 --padColor 000000 /tmp/m.png --out icons/icon-maskable-512.png
+```
+
+## 授權
+
+[MIT License](LICENSE)

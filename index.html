@@ -83,7 +83,7 @@
   #showBtn:active { filter: brightness(.85); }
   button.on { background: var(--fg-faint); border-color: var(--fg); }
 
-  .label { font-size: 16px; color: var(--fg-dim); margin: 2px 0 -4px; display: flex; justify-content: space-between; align-items: baseline; }
+  .label { font-size: 16px; color: var(--fg-dim); margin: 2px 0 -4px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: baseline; }
   .label button { position: relative; font-size: 15px; padding: 4px 10px; border-width: 1px; }
   /* 視覺上維持小按鈕，點擊熱區擴大到約 44px */
   .label button::after { content: ''; position: absolute; inset: -10px -8px; }
@@ -111,8 +111,29 @@
   .chip.dragging .x { background: #000; color: var(--fg); }
   .empty { color: var(--fg-dim); font-size: 17px; padding: 10px 0; }
   .hint { font-size: 14px; color: var(--fg-dim); text-align: center; }
-  @media (hover: none) { .hint .kb { display: none; } }
-  @media (hover: hover) { .hint .touch { display: none; } }
+  /* 只對鍵盤／只對觸控顯示的說明 */
+  @media (hover: none) { .kb { display: none; } }
+  @media (hover: hover) { .touch { display: none; } }
+
+  /* 管理模式才出現的匯出／匯入 */
+  .label .tools { display: flex; gap: 18px; }
+  .label .mgmt { display: none; }
+  .managing .label .mgmt { display: inline-block; }
+
+  /* 提示列：刪除後可復原、匯入結果 */
+  #toast {
+    position: fixed; left: 50%; z-index: 5;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    display: none; align-items: center; gap: 12px;
+    max-width: calc(100vw - 32px);
+    padding: 8px 8px 8px 16px;
+    background: var(--bg); border: 2px solid var(--fg); border-radius: 12px;
+    font-size: 18px;
+  }
+  #toast.on { display: flex; }
+  #toastMsg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #toastUndo { flex: 0 0 auto; font-size: 18px; padding: 8px 14px; background: var(--fg); color: #000; border-color: var(--fg); }
 
   /* ---------- 全螢幕顯示 ---------- */
   #display {
@@ -161,8 +182,16 @@
   </div>
 
   <div id="phraseWrap">
-    <div class="label"><span id="phraseLabel">常用句（點一下直接全螢幕）</span><button id="manageBtn" type="button" aria-pressed="false">管理</button></div>
+    <div class="label">
+      <span id="phraseLabel">常用句（點一下直接全螢幕）</span>
+      <span class="tools">
+        <button id="exportBtn" class="mgmt" type="button" title="把常用句存成檔案">匯出</button>
+        <button id="importBtn" class="mgmt" type="button" title="從檔案加入常用句">匯入</button>
+        <button id="manageBtn" type="button" aria-pressed="false">管理</button>
+      </span>
+    </div>
     <div class="chips" id="phrases"></div>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
   </div>
 
   <div id="historyWrap">
@@ -175,6 +204,8 @@
     <span class="touch">按「全螢幕」顯示 · 全螢幕時點一下螢幕返回</span>
   </div>
 </main>
+
+<div id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastUndo" type="button" hidden>復原</button></div>
 
 <div id="display" role="button" tabindex="-1" aria-label="點一下返回輸入">
   <p id="text" aria-live="polite"></p>
@@ -213,6 +244,25 @@
   let size = store.get('size', '中');
   if (!(size in SIZES)) size = '中';
 
+  // ---------- 提示列（刪除後可復原） ----------
+  const toast = $('toast'), toastMsg = $('toastMsg'), toastUndo = $('toastUndo');
+  let toastTimer = null, undoFn = null;
+  // 同時只有一則；有 undo 時顯示「復原」並停留 5 秒
+  function notify(msg, undo) {
+    toastMsg.textContent = msg;
+    undoFn = undo || null;
+    toastUndo.hidden = !undo;
+    toast.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(closeToast, undo ? 5000 : 2500);
+  }
+  function closeToast() {
+    clearTimeout(toastTimer);
+    toast.classList.remove('on');
+    undoFn = null;
+  }
+  toastUndo.addEventListener('click', () => { const f = undoFn; closeToast(); if (f) f(); });
+
   // ---------- 列表 ----------
   function renderChips(el, items, onPick, onRemove) {
     el.innerHTML = '';
@@ -231,12 +281,6 @@
         const x = document.createElement('span');
         x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-hidden', 'true');
         b.appendChild(x);
-        // 鍵盤：管理模式下聚焦 chip 按 Delete / Backspace 刪除
-        b.addEventListener('keydown', (e) => {
-          if ((e.key === 'Delete' || e.key === 'Backspace') && phraseWrap.classList.contains('managing')) {
-            e.preventDefault(); onRemove(i);
-          }
-        });
       }
       b.addEventListener('click', (e) => {
         if (onRemove && phraseWrap.classList.contains('managing')) {
@@ -246,11 +290,42 @@
       el.appendChild(b);
     });
   }
-  function renderPhrases() {
-    renderChips(phrasesEl, phrases, show, (i) => {
-      phrases.splice(i, 1); store.set('phrases', phrases); renderPhrases();
+  // focusIndex：重新渲染後把焦點放回這一句（鍵盤操作時不要掉焦點）
+  function renderPhrases(focusIndex) {
+    renderChips(phrasesEl, phrases, show, (i) => removePhrase(i));
+    if (focusIndex != null) {
+      const chip = phrasesEl.querySelectorAll('.chip')[focusIndex];
+      if (chip) chip.focus(); else $('manageBtn').focus();
+    }
+  }
+  const short = (t) => { t = t.replace(/\s+/g, ' '); return t.length > 12 ? t.slice(0, 12) + '…' : t; };
+  function removePhrase(i, refocus) {
+    const [removed] = phrases.splice(i, 1);
+    store.set('phrases', phrases);
+    renderPhrases(refocus ? Math.min(i, phrases.length - 1) : null);
+    notify(`已刪除「${short(removed)}」`, () => {
+      phrases = phrases.filter((p) => p !== removed);
+      phrases.splice(Math.min(i, phrases.length), 0, removed);
+      store.set('phrases', phrases);
+      renderPhrases();
     });
   }
+  // 鍵盤（管理模式）：Delete／Backspace 刪除，Alt+方向鍵移動
+  phrasesEl.addEventListener('keydown', (e) => {
+    if (!phraseWrap.classList.contains('managing')) return;
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    const i = +chip.dataset.i;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removePhrase(i, true); return; }
+    const d = e.altKey && { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    const j = i + d;
+    if (j < 0 || j >= phrases.length) return;
+    [phrases[i], phrases[j]] = [phrases[j], phrases[i]];
+    store.set('phrases', phrases);
+    renderPhrases(j);
+  });
   // ---------- 拖曳排序（管理模式） ----------
   let drag = null;
   phrasesEl.addEventListener('pointerdown', (e) => {
@@ -455,9 +530,50 @@
     e.currentTarget.textContent = on ? '完成' : '管理';
     e.currentTarget.classList.toggle('on', on);
     e.currentTarget.setAttribute('aria-pressed', String(on));
-    $('phraseLabel').textContent = on ? '拖曳排序 · 點 × 刪除' : '常用句（點一下直接全螢幕）';
+    // 固定字串，用 innerHTML 是為了「只給鍵盤看」的說明
+    $('phraseLabel').innerHTML = on
+      ? '拖曳排序<span class="kb">（或 Alt+←→）</span> · 點 × 刪除'
+      : '常用句（點一下直接全螢幕）';
   });
-  $('clearHistBtn').addEventListener('click', () => { history = []; store.set('history', history); renderHistory(); });
+  $('clearHistBtn').addEventListener('click', () => {
+    if (!history.length) return;
+    const prev = history;
+    history = []; store.set('history', history); renderHistory();
+    notify('已清空最近說過', () => {
+      history = cleanList([...history, ...prev]).slice(0, 15);
+      store.set('history', history); renderHistory();
+    });
+  });
+
+  // ---------- 匯出／匯入常用句 ----------
+  $('exportBtn').addEventListener('click', () => {
+    const json = JSON.stringify({ app: 'kan-wo-shuo', version: 1, phrases }, null, 2) + '\n';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    a.download = '看我說-常用句.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  const importFile = $('importFile');
+  $('importBtn').addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', async () => {
+    const file = importFile.files[0];
+    importFile.value = '';   // 同一個檔案可以再選一次
+    if (!file) return;
+    // 接受 { phrases: [...] }（本頁匯出的格式）或直接是字串陣列
+    let list = null;
+    try {
+      if (file.size > 1e6) throw new Error('too large');
+      const data = JSON.parse(await file.text());
+      const arr = Array.isArray(data) ? data : data && data.phrases;
+      if (Array.isArray(arr)) list = cleanList(arr.map((s) => (typeof s === 'string' ? s.trim() : s)));
+    } catch {}
+    if (!list) { notify('檔案格式不對，沒有匯入'); return; }
+    const added = list.filter((p) => !phrases.includes(p));
+    phrases = [...phrases, ...added];
+    store.set('phrases', phrases); renderPhrases();
+    notify(added.length ? `已匯入 ${added.length} 句` : '沒有新的句子');
+  });
 
   renderPhrases();
   renderHistory();

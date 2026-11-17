@@ -1,0 +1,13 @@
+{
+  "name": "kan-wo-shuo",
+  "private": true,
+  "description": "看我說的開發工具（只用來跑測試，網站本身沒有建置步驟）",
+  "license": "MIT",
+  "scripts": {
+    "test": "playwright test",
+    "serve": "node tests/serve.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1"
+  }
+}

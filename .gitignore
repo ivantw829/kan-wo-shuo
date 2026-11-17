@@ -3,3 +3,8 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# 測試
+node_modules/
+test-results/
+playwright-report/

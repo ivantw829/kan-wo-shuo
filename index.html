@@ -4,10 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="在很吵、不能出聲、或說不出話的時候，打字後用全螢幕黑底黃字大字給對方看。">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="看我說">
 <meta name="application-name" content="看我說">
+<meta property="og:type" content="website">
+<meta property="og:title" content="看我說">
+<meta property="og:description" content="在很吵、不能出聲、或說不出話的時候，打字後用全螢幕黑底黃字大字給對方看。">
+<meta property="og:url" content="https://ivantw829.github.io/kan-wo-shuo/">
+<meta property="og:image" content="https://ivantw829.github.io/kan-wo-shuo/icons/icon-512.png">
+<meta property="og:locale" content="zh_TW">
 <title>看我說</title>
 <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -15,8 +24,11 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- 備用楷體：裝置上沒有標楷體時（例如 iPhone / Android）使用霞鶩文楷 -->
-<link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&display=swap" rel="stylesheet">
+<!-- 備用楷體：裝置上沒有標楷體時（例如 iPhone / Android）使用霞鶩文楷。
+     media="print" 再切回 all：不擋首次繪製；crossorigin：讓 service worker 拿到的不是 opaque 回應 -->
+<link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&display=swap" rel="stylesheet"
+      crossorigin media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&display=swap" rel="stylesheet" crossorigin></noscript>
 <style>
   :root {
     --fg: #FFD500;
@@ -79,20 +91,25 @@
   .chips::-webkit-scrollbar { display: none; }
   .chip {
     flex: 0 0 auto; position: relative;
+    display: inline-flex; align-items: center;
     font-size: 22px; padding: 10px 14px;
-    max-width: 70vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 70vw;
   }
+  /* ellipsis 只套在文字上，管理模式的 × 不會被截掉 */
+  .chip .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chip .x {
-    display: none; margin-left: 8px; color: #000; background: var(--fg);
+    display: none; flex: 0 0 auto; position: relative; margin-left: 8px; color: #000; background: var(--fg);
     border-radius: 50%; width: 22px; height: 22px; line-height: 22px;
-    font-size: 16px; text-align: center; vertical-align: middle;
+    font-size: 16px; text-align: center;
   }
+  /* 點擊熱區擴大到約 36px */
+  .chip .x::after { content: ''; position: absolute; inset: -7px; }
   .managing .chip .x { display: inline-block; }
   .managing .chips { flex-wrap: wrap; overflow: visible; }
   .managing .chip { touch-action: none; cursor: grab; border-style: dashed; }
   .chip.dragging { background: var(--fg); color: #000; border-style: solid; transform: scale(1.06); cursor: grabbing; z-index: 2; }
   .chip.dragging .x { background: #000; color: var(--fg); }
-  .empty { color: var(--fg-faint); font-size: 17px; padding: 10px 0; }
+  .empty { color: var(--fg-dim); font-size: 17px; padding: 10px 0; }
   .hint { font-size: 14px; color: var(--fg-dim); text-align: center; }
   @media (hover: none) { .hint .kb { display: none; } }
   @media (hover: hover) { .hint .touch { display: none; } }
@@ -103,8 +120,11 @@
     display: none; align-items: center; justify-content: center;
     background: var(--bg);
     cursor: pointer; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
   }
   #display.show { display: flex; }
+  /* 字已經縮到最小還放不下（極長的文字）：允許捲動，不要切掉 */
+  #display.overflow { overflow: auto; align-items: flex-start; }
   #display:focus { outline: none; }
   #display.flip #text { transform: rotate(180deg); }
   #text {
@@ -137,11 +157,11 @@
     <button id="clearBtn" type="button">清除</button>
     <button id="saveBtn" type="button">＋常用</button>
     <button id="sizeBtn" type="button" title="全螢幕文字的最大字級">字級：中</button>
-    <button id="flipBtn" type="button" title="把文字倒過來，給對面的人看">翻轉</button>
+    <button id="flipBtn" type="button" title="把文字倒過來，給對面的人看" aria-pressed="false">翻轉</button>
   </div>
 
   <div id="phraseWrap">
-    <div class="label"><span id="phraseLabel">常用句（點一下直接全螢幕）</span><button id="manageBtn" type="button">管理</button></div>
+    <div class="label"><span id="phraseLabel">常用句（點一下直接全螢幕）</span><button id="manageBtn" type="button" aria-pressed="false">管理</button></div>
     <div class="chips" id="phrases"></div>
   </div>
 
@@ -164,7 +184,7 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const input = $('input'), display = $('display'), text = $('text'), tapHint = $('tapHint');
+  const input = $('input'), display = $('display'), text = $('text'), tapHint = $('tapHint'), editor = $('editor');
   const phrasesEl = $('phrases'), historyEl = $('history'), phraseWrap = $('phraseWrap');
 
   // ---------- 儲存（失敗時照常運作，只是不會記住） ----------
@@ -173,13 +193,20 @@
       try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); }
       catch { return fallback; }
     },
-    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} },
+    // 字串陣列：資料壞掉（不是陣列、混了別的型別）時不要讓整頁掛掉
+    getList(key, fallback) {
+      const v = store.get(key, null);
+      return Array.isArray(v) ? cleanList(v) : fallback;
+    }
   };
+  // 只留非空白字串、去掉重複
+  const cleanList = (arr) => [...new Set(arr.filter((s) => typeof s === 'string' && s.trim()))];
 
   const DEFAULT_PHRASES = ['請再說一次', '我聽不到', '請等一下', '好', '不用了，謝謝', '謝謝', '請用打字', '在哪裡？', '多少錢？'];
-  let phrases = store.get('phrases', DEFAULT_PHRASES);
-  let history = store.get('history', []);
-  let flipped = store.get('flipped', false);
+  let phrases = store.getList('phrases', DEFAULT_PHRASES);
+  let history = store.getList('history', []).slice(0, 15);
+  let flipped = store.get('flipped', false) === true;
   // 全螢幕字級上限：畫面短邊的比例。長句會再自動縮小以塞進畫面。
   const SIZES = { '大': 0.34, '中': 0.24, '小': 0.16 };
   const SIZE_ORDER = ['中', '大', '小'];
@@ -196,8 +223,10 @@
     }
     items.forEach((t, i) => {
       const b = document.createElement('button');
-      b.type = 'button'; b.className = 'chip'; b.dataset.i = i;
-      b.appendChild(document.createTextNode(t.replace(/\n/g, ' ')));
+      b.type = 'button'; b.className = 'chip'; b.dataset.i = i; b.title = t;
+      const label = document.createElement('span');
+      label.className = 't'; label.textContent = t.replace(/\n/g, ' ');
+      b.appendChild(label);
       if (onRemove) {
         const x = document.createElement('span');
         x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-hidden', 'true');
@@ -271,6 +300,7 @@
   // ---------- 自動放到最大 ----------
   function fit() {
     if (!display.classList.contains('show')) return;
+    display.classList.remove('overflow');
     const pad = Math.max(16, Math.min(display.clientWidth, display.clientHeight) * 0.04);
     const W = display.clientWidth - pad * 2;
     const H = display.clientHeight - pad * 2;
@@ -288,7 +318,15 @@
       text.style.fontSize = Math.floor(cap) + 'px';
       if (text.scrollWidth > W + 0.5 || text.scrollHeight > H + 0.5) text.style.fontSize = Math.floor(lo) + 'px';
     }
+    // 最小字級還是放不下：改成可以捲動
+    display.classList.toggle('overflow', text.scrollWidth > W + 0.5 || text.scrollHeight > H + 0.5);
   }
+  // 視窗大小、旋轉、字型晚到（霞鶩文楷是分段載入）都要重算，同一個畫格只算一次
+  let fitFrame = 0;
+  const scheduleFit = () => {
+    if (fitFrame) return;
+    fitFrame = requestAnimationFrame(() => { fitFrame = 0; fit(); });
+  };
 
   // ---------- 螢幕常亮 ----------
   let wakeLock = null;
@@ -310,20 +348,26 @@
   const justShown = () => Date.now() - shownAt < IGNORE_MS;
 
   function show(t) {
-    t = (t ?? input.value).replace(/^\s+|\s+$/g, '');
+    t = (t ?? input.value).trim();
     if (!t) { input.focus(); return; }
     shownAt = Date.now();
     text.textContent = t;
     display.classList.toggle('flip', flipped);
     display.classList.add('show');
     input.blur();
+    // 全螢幕時，底下的輸入畫面不能被 Tab 聚焦或被讀屏讀到
+    editor.inert = true;
     try { display.focus({ preventScroll: true }); } catch {}
     addHistory(t);
 
     const root = document.documentElement;
     if (root.requestFullscreen && !document.fullscreenElement) {
       root.requestFullscreen({ navigationUI: 'hide' })
-        .then(() => { enteredFullscreen = true; })
+        .then(() => {
+          // 進入全螢幕之前就已經按 Esc 返回了：不要卡在全螢幕
+          if (!display.classList.contains('show')) document.exitFullscreen().catch(() => {});
+          else enteredFullscreen = true;
+        })
         .catch(() => {});
     }
     keepAwake();
@@ -338,7 +382,8 @@
 
   function hide() {
     if (!display.classList.contains('show')) return;
-    display.classList.remove('show');
+    display.classList.remove('show', 'overflow');
+    editor.inert = false;
     releaseAwake();
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
     enteredFullscreen = false;
@@ -351,8 +396,9 @@
     // 使用者用 Esc / 系統手勢離開全螢幕時，一起回到輸入畫面
     if (!document.fullscreenElement && enteredFullscreen) hide();
   });
-  window.addEventListener('resize', fit);
-  window.addEventListener('orientationchange', () => setTimeout(fit, 250));
+  if ('ResizeObserver' in window) new ResizeObserver(scheduleFit).observe(display, { box: 'border-box' });
+  else window.addEventListener('resize', scheduleFit);
+  if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', scheduleFit);
 
   // ---------- 鍵盤 ----------
   input.addEventListener('keydown', (e) => {
@@ -392,7 +438,11 @@
     savedTimer = setTimeout(() => { saveBtn.textContent = '＋常用'; }, 1200);
   });
   const flipBtn = $('flipBtn');
-  const syncFlip = () => { flipBtn.classList.toggle('on', flipped); flipBtn.textContent = flipped ? '翻轉：開' : '翻轉'; };
+  const syncFlip = () => {
+    flipBtn.classList.toggle('on', flipped);
+    flipBtn.setAttribute('aria-pressed', String(flipped));
+    flipBtn.textContent = flipped ? '翻轉：開' : '翻轉';
+  };
   flipBtn.addEventListener('click', () => { flipped = !flipped; store.set('flipped', flipped); syncFlip(); });
   const sizeBtn = $('sizeBtn');
   const syncSize = () => { sizeBtn.textContent = '字級：' + size; };
@@ -404,6 +454,7 @@
     const on = phraseWrap.classList.toggle('managing');
     e.currentTarget.textContent = on ? '完成' : '管理';
     e.currentTarget.classList.toggle('on', on);
+    e.currentTarget.setAttribute('aria-pressed', String(on));
     $('phraseLabel').textContent = on ? '拖曳排序 · 點 × 刪除' : '常用句（點一下直接全螢幕）';
   });
   $('clearHistBtn').addEventListener('click', () => { history = []; store.set('history', history); renderHistory(); });

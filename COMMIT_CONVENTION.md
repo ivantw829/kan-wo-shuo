@@ -47,6 +47,9 @@
   | `icon` | 圖示檔與相關設定 |
   | `font` | 字型 |
   | `repo` | git、hook、專案設定 |
+  | `pwa` | service worker、manifest、離線 |
+  | `test` | Playwright 測試 |
+  | `ci` | GitHub Actions、部署 |
 
   需要新範圍時直接用，之後補進這張表。
 

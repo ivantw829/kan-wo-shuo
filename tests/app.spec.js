@@ -178,6 +178,11 @@ test.describe('常用句', () => {
     await page.locator('#phrases .chip').nth(2).locator('.x').click();
     expect(await chipTexts(page, 'phrases')).not.toContain('請等一下');
     await expect(page.locator('#toast')).toContainText('已刪除「請等一下」');
+    // 提示文字不能被截斷（曾因 left:50% 讓提示列只有半個畫面寬）
+    expect(await page.evaluate(() => {
+      const m = document.getElementById('toastMsg');
+      return m.scrollWidth <= m.clientWidth;
+    })).toBe(true);
     await page.locator('#toastUndo').click();
     expect(await chipTexts(page, 'phrases')).toEqual(DEFAULT_PHRASES);
     await expect(page.locator('#toast')).not.toBeVisible();

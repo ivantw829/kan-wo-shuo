@@ -116,15 +116,16 @@
   @media (hover: hover) { .touch { display: none; } }
 
   /* 管理模式才出現的匯出／匯入 */
-  .label .tools { display: flex; gap: 18px; }
+  .label .tools { display: flex; gap: 18px; margin-left: auto; }
   .label .mgmt { display: none; }
   .managing .label .mgmt { display: inline-block; }
 
   /* 提示列：刪除後可復原、匯入結果 */
   #toast {
-    position: fixed; left: 50%; z-index: 5;
+    /* left/right + margin auto 置中：用 left:50% 的話寬度會被限制在半個畫面 */
+    position: fixed; left: 0; right: 0; z-index: 5;
     bottom: max(16px, env(safe-area-inset-bottom));
-    transform: translateX(-50%);
+    margin: 0 auto; width: max-content;
     display: none; align-items: center; gap: 12px;
     max-width: calc(100vw - 32px);
     padding: 8px 8px 8px 16px;
